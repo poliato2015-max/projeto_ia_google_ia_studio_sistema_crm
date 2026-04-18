@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';
 import { KPICard } from '@/components/KPICard';
@@ -8,11 +8,12 @@ import { SalesGrowthChart, LeadDistributionChart } from '@/components/DashboardC
 import { PriorityTasks } from '@/components/PriorityTasks';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { RiskyOpportunities } from '@/components/RiskyOpportunities';
-import { Calendar, Plus, Users, TrendingUp, Handshake, Target, Loader2, AlertTriangle } from 'lucide-react';
+import { Calendar, Plus, Users, TrendingUp, Handshake, Target, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSupabase, Contact, Deal, isSupabaseConfigured } from '@/lib/supabase';
 import { ContactForm } from '@/components/ContactForm';
+import { useAuth } from '@/components/AuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,37 +22,69 @@ export default function DashboardPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
+  const { loading: authLoading, session } = useAuth();
   const configured = isSupabaseConfigured();
-  const supabase = getSupabase();
+  
+  // Memoize supabase client
+  const supabase = useMemo(() => getSupabase(), []);
 
   const fetchData = useCallback(async () => {
     if (!configured) {
       setLoading(false);
       return;
     }
+
+    if (!supabase) {
+      console.warn('Dashboard: Supabase client not available.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setFetchError(null);
+
+      // Safety timeout for database queries (8 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        setFetchError('A conexão com o banco de dados está lenta. Tente atualizar a página.');
+        setLoading(false);
+      }, 8000);
+
       const [contRes, dealRes] = await Promise.all([
         supabase.from('contacts').select('*'),
         supabase.from('deals').select('*, contact:contacts(*)').order('created_at', { ascending: false })
       ]);
 
-      if (contRes.error) throw contRes.error;
-      if (dealRes.error) throw dealRes.error;
+      clearTimeout(timeoutId);
+
+      if (contRes.error) {
+        console.error('Contacts Error:', contRes.error);
+        // We don't throw yet, just log and continue if possible
+      }
+      
+      if (dealRes.error) {
+        console.error('Deals Error:', dealRes.error);
+      }
 
       setContacts(contRes.data || []);
       setDeals(dealRes.data || []);
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error.message || error);
+      setFetchError('Ocorreu um erro ao carregar os dados. Verifique suas tabelas no Supabase.');
     } finally {
       setLoading(false);
     }
   }, [supabase, configured]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // Only fetch when auth state is stable
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [authLoading, fetchData]);
 
   const stats = {
     totalRevenue: deals.reduce((acc, curr) => acc + (curr.value || 0), 0),
@@ -106,10 +139,36 @@ export default function DashboardPage() {
 
   if (loading && deals.length === 0 && contacts.length === 0 && configured) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center p-6">
         <div className="text-center">
-          <Loader2 className="animate-spin text-primary mb-4 mx-auto" size={48} />
-          <p className="text-on-surface-variant font-black uppercase tracking-widest text-[10px]">Arquitetando Dashboard...</p>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className="mb-6 flex justify-center"
+          >
+            <Loader2 className="text-primary" size={48} />
+          </motion.div>
+          <h3 className="text-xs font-black uppercase tracking-[0.3em] text-on-surface animate-pulse">
+            Processando...
+          </h3>
+          
+          {fetchError && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-8 p-4 bg-error-container/20 rounded-xl border border-error/10"
+            >
+              <AlertTriangle className="text-error mx-auto mb-2" size={20} />
+              <p className="text-[10px] text-error font-black uppercase mb-3">{fetchError}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="w-full py-2 bg-on-surface text-surface text-[9px] font-black rounded-lg flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={12} />
+                FORÇAR RECARREGAMENTO
+              </button>
+            </motion.div>
+          )}
         </div>
       </div>
     );

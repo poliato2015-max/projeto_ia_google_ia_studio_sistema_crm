@@ -1,0 +1,293 @@
+'use client';
+
+import { useState, useMemo, useEffect } from 'react';
+import { getSupabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
+import { Loader2, Mail, Lock, ShieldCheck, ArrowRight, LayoutDashboard, Check, X } from 'lucide-react';
+import Image from 'next/image';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isExistingSession, setIsExistingSession] = useState(false);
+  const router = useRouter();
+  const supabase = getSupabase();
+
+  // Check for existing session on mount
+  useEffect(() => {
+    let isMounted = true;
+    const checkSession = async () => {
+      if (!supabase) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && isMounted) {
+          setIsExistingSession(true);
+        }
+      } catch (e) {}
+    };
+    checkSession();
+    return () => { isMounted = false; };
+  }, [supabase]);
+
+  const passwordRules = useMemo(() => {
+    return [
+      { id: 'min-length', label: 'Pelo menos 6 caracteres', valid: password.length >= 6 },
+      { id: 'upper', label: 'Uma letra maiúscula', valid: /[A-Z]/.test(password) },
+      { id: 'lower', label: 'Uma letra minúscula', valid: /[a-z]/.test(password) },
+      { id: 'number', label: 'Um número', valid: /[0-9]/.test(password) },
+    ];
+  }, [password]);
+
+  const isPasswordValid = passwordRules.every(rule => rule.valid);
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isFormValid = isEmailValid && isPasswordValid;
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      if (!supabase) throw new Error('Serviço indisponível.');
+      
+      const { data, error: loginErr } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (loginErr) throw loginErr;
+      
+      setSuccessMsg('Entrando...');
+      setLoading(false);
+
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
+    } catch (err: any) {
+      setLoading(false);
+      setError(err.message || 'Falha na autenticação.');
+    }
+  };
+
+  const handleSignUp = async () => {
+    if (!isPasswordValid) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    
+    // Timeout fallback
+    const timeout = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError('O cadastro falhou por demorar demais.');
+      }
+    }, 12000);
+
+    try {
+      if (!supabase) throw new Error('Supabase offline.');
+
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+
+      clearTimeout(timeout);
+
+      if (signUpErr) throw signUpErr;
+      setSuccessMsg('Conta criada! Verifique seu e-mail (incluindo SPAM).');
+    } catch (err: any) {
+      clearTimeout(timeout);
+      setError(err.message || 'Erro ao realizar cadastro.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-surface grid grid-cols-1 lg:grid-cols-2 overflow-hidden">
+      {/* Visual Side */}
+      <div className="hidden lg:flex relative bg-surface-container-high overflow-hidden items-center justify-center p-20 text-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
+        
+        <div className="relative z-10 space-y-8 max-w-md flex flex-col items-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-20 h-20 bg-primary rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/40 mb-4"
+          >
+            <ShieldCheck size={40} className="text-white" />
+          </motion.div>
+          
+          <h1 className="text-7xl font-black font-headline text-on-surface leading-[0.9] tracking-tighter">
+            EXECUTIVE <br />
+            <span className="text-primary">LENS</span>
+          </h1>
+          
+          <p className="text-xl text-on-surface-variant font-medium leading-relaxed">
+            A plataforma de CRM definitiva para líderes que buscam clareza, precisão e performance em tempo real.
+          </p>
+        </div>
+
+        {/* Floating Accents */}
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 40, repeat: Infinity, ease: 'linear' }}
+          className="absolute -right-20 -top-20 w-96 h-96 border-2 border-outline-variant/10 rounded-full"
+        />
+        <motion.div 
+          animate={{ rotate: -360 }}
+          transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
+          className="absolute -left-20 -bottom-20 w-96 h-96 border-2 border-outline-variant/10 rounded-full"
+        />
+      </div>
+
+      {/* Form Side */}
+      <div className="flex items-center justify-center p-8 bg-surface">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md space-y-8"
+        >
+          <div className="text-center lg:text-left">
+            <div className="lg:hidden flex justify-center mb-6">
+               <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">
+                <ShieldCheck size={24} className="text-white" />
+              </div>
+            </div>
+            <h2 className="text-4xl font-black font-headline text-on-surface tracking-tight">Bem-vindo.</h2>
+            <p className="text-on-surface-variant mt-2 font-medium italic serif">Acesse o portal para gerenciar seu pipeline.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-4">
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                  <Mail size={18} />
+                </div>
+                <input
+                  type="email"
+                  placeholder="E-mail profissional"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                />
+              </div>
+
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                  <Lock size={18} />
+                </div>
+                <input
+                  type="password"
+                  placeholder="Senha"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                />
+              </div>
+
+              {/* Password Requirements UI */}
+              <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Requisitos de Senha</p>
+                <div className="grid grid-cols-1 gap-1">
+                  {passwordRules.map((rule) => (
+                    <div key={rule.id} className="flex items-center gap-2 text-[11px] font-bold">
+                      {rule.valid ? (
+                        <Check size={12} className="text-success" />
+                      ) : (
+                        <X size={12} className="text-on-surface-variant/40" />
+                      )}
+                      <span className={rule.valid ? "text-on-surface" : "text-on-surface-variant/60"}>
+                        {rule.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-4 bg-error-container/20 border-2 border-error/20 rounded-2xl text-error text-[11px] font-bold flex flex-col gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-error" />
+                  {error}
+                </div>
+              </motion.div>
+            )}
+
+            {successMsg && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-4 bg-success/10 border-2 border-success/20 rounded-2xl text-success text-[11px] font-bold flex items-center gap-2"
+              >
+                <Check size={14} />
+                {successMsg}
+              </motion.div>
+            )}
+
+            {isExistingSession && (
+              <button
+                type="button"
+                onClick={() => window.location.href = '/'}
+                className="w-full bg-success text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-success-dim transition-all shadow-xl shadow-success/25"
+              >
+                IR PARA O CRM AGORA
+                <ArrowRight size={16} />
+              </button>
+            )}
+
+            {!isExistingSession && (
+              <div className="flex flex-col gap-3">
+                <button
+                  type="submit"
+                  disabled={loading || !isFormValid}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 hover:bg-primary-dim transition-all shadow-xl shadow-primary/25 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 className="animate-spin" size={20} /> : (
+                    <>
+                      ENTRAR NO SISTEMA
+                      <ArrowRight size={16} />
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={handleSignUp}
+                  disabled={loading || !isPasswordValid}
+                  className="w-full border-2 border-outline-variant/30 text-on-surface font-bold py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-surface-container-low transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  CRIAR NOVA CONTA
+                </button>
+              </div>
+            )}
+          </form>
+
+          <div className="pt-6 border-t border-outline-variant/20 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+            <span className="flex items-center gap-2">
+              <LayoutDashboard size={12} className="text-primary" />
+              PORTAL SEGURO
+            </span>
+            <span className="opacity-50 hover:opacity-100 cursor-pointer">Esqueceu a senha?</span>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}

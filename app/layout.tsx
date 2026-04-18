@@ -19,11 +19,15 @@ export const metadata: Metadata = {
   description: 'Gestão de performance e CRM de alto nível.',
 };
 
+import { AuthProvider } from '@/components/AuthProvider';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${manrope.variable}`}>
       <body suppressHydrationWarning className="font-inter antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

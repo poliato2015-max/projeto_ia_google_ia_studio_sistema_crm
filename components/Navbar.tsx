@@ -1,9 +1,13 @@
 'use client';
 
-import { Search, Bell, Settings } from 'lucide-react';
+import { Search, Bell, Settings, LogOut } from 'lucide-react';
 import Image from 'next/image';
 
+import { useAuth } from '@/components/AuthProvider';
+
 export function Navbar() {
+  const { user, signOut } = useAuth();
+
   return (
     <header className="h-16 fixed top-0 right-0 left-0 bg-surface/80 backdrop-blur-md z-40 px-8 flex items-center justify-between border-b border-outline-variant/10">
       <div className="flex items-center gap-8">
@@ -43,17 +47,33 @@ export function Navbar() {
 
         <div className="flex items-center gap-3 pl-4 border-l border-outline-variant/15">
           <div className="text-right hidden lg:block">
-            <p className="text-sm font-bold leading-none">Adriano Poli</p>
-            <p className="text-[10px] text-on-surface-variant leading-none mt-1">Sócio Diretor</p>
+            <p className="text-sm font-bold leading-none truncate max-w-[150px]">{user?.email?.split('@')[0] || 'Carregando...'}</p>
+            <p className="text-[10px] text-on-surface-variant leading-none mt-1 uppercase tracking-widest">{user?.email || 'Acesso Restrito'}</p>
           </div>
-          <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-primary-container relative">
-            <Image 
-              src="https://picsum.photos/seed/executive/100/100" 
-              alt="Perfil" 
-              fill
-              className="object-cover"
-              referrerPolicy="no-referrer"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-primary-container relative bg-primary/10 flex items-center justify-center">
+               {user?.email ? (
+                 <Image 
+                  src={`https://picsum.photos/seed/${user.id}/100/100`} 
+                  alt="Perfil" 
+                  fill
+                  className="object-cover"
+                  referrerPolicy="no-referrer"
+                />
+               ) : (
+                 <div className="text-primary font-black text-xs">EL</div>
+               )}
+            </div>
+            <button 
+              onClick={() => {
+                console.log('Navbar: LogOut clicked');
+                signOut();
+              }}
+              className="p-2 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-full transition-all"
+              title="Sair"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </div>

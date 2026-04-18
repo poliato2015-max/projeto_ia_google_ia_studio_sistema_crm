@@ -27,8 +27,11 @@ const secondaryItems = [
   { name: 'Sair', icon: LogOut, href: '/sair' },
 ];
 
+import { useAuth } from '@/components/AuthProvider';
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { signOut } = useAuth();
 
   return (
     <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-surface-container-low dark:bg-slate-900 py-8 px-4 z-30 pt-20">
@@ -65,16 +68,23 @@ export function Sidebar() {
       </nav>
 
       <div className="flex flex-col gap-1 pt-6 border-t border-outline-variant/15">
-        {secondaryItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all"
-          >
-            <item.icon size={18} />
-            <span className="text-sm font-medium tracking-tight leading-none">{item.name}</span>
-          </Link>
-        ))}
+        <Link
+          href="/ajuda"
+          className="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all"
+        >
+          <HelpCircle size={18} />
+          <span className="text-sm font-medium tracking-tight leading-none">Central de Ajuda</span>
+        </Link>
+        <button
+          onClick={() => {
+            console.log('Sidebar: LogOut clicked');
+            signOut();
+          }}
+          className="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high rounded-xl transition-all w-full text-left"
+        >
+          <LogOut size={18} />
+          <span className="text-sm font-medium tracking-tight leading-none">Sair</span>
+        </button>
       </div>
     </aside>
   );

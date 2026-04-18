@@ -1,38 +1,28 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-let supabaseClient: SupabaseClient | null = null;
+let supabaseClient: any = null;
 
 export const getSupabase = () => {
+  if (typeof window === 'undefined') return null;
   if (supabaseClient) return supabaseClient;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-              process.env.SUPABASE_ANON_KEY || 
-              process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const isValidUrl = url && url.startsWith('http') && !url.includes('placeholder');
-  const isValidKey = key && key.length > 20 && !key.includes('placeholder');
+  if (!url || !key) return null;
 
-  if (!isValidUrl || !isValidKey) {
-    if (typeof window !== 'undefined') {
-      console.warn('Supabase: Usando cliente placeholder (configuração incompleta ou inválida).');
-    }
-    supabaseClient = createClient('https://placeholder.supabase.co', 'placeholder');
-    return supabaseClient;
+  try {
+    supabaseClient = createBrowserClient(url, key, {
+      cookieOptions: {
+        name: 'executive-lens-auth',
+        sameSite: 'none',
+        secure: true,
+        path: '/',
+      }
+    });
+  } catch (e) {
+    console.error('Supabase init error:', e);
   }
-
-  // URL real detectada
-  let finalUrl = url;
-  if (finalUrl.endsWith('/')) {
-    finalUrl = finalUrl.slice(0, -1);
-  }
-
-  supabaseClient = createClient(finalUrl, key, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-    }
-  });
   
   return supabaseClient;
 };
@@ -40,8 +30,8 @@ export const getSupabase = () => {
 export const isSupabaseConfigured = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-              process.env.SUPABASE_ANON_KEY || 
-              process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+              process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+              process.env.SUPABASE_ANON_KEY;
   
   const isValidUrl = url && url.startsWith('http') && !url.includes('placeholder');
   const isValidKey = key && key.length > 20 && !key.includes('placeholder');
