@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Contact, getSupabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,15 +16,30 @@ interface ContactFormProps {
 export function ContactForm({ contact, isOpen, onClose, onSave }: ContactFormProps) {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
-  const [formData, setFormData] = useState<Partial<Contact>>(
-    contact || {
-      name: '',
-      email: '',
-      company: '',
-      status: 'Lead',
-      value: 0,
+  const [formData, setFormData] = useState<Partial<Contact>>({
+    name: '',
+    email: '',
+    company: '',
+    status: 'Lead',
+    value: 0,
+  });
+
+  // Synchronize form data when the contact prop changes or when the form opens
+  useEffect(() => {
+    if (isOpen) {
+      if (contact) {
+        setFormData(contact);
+      } else {
+        setFormData({
+          name: '',
+          email: '',
+          company: '',
+          status: 'Lead',
+          value: 0,
+        });
+      }
     }
-  );
+  }, [contact, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

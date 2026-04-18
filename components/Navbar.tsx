@@ -1,12 +1,45 @@
 'use client';
 
 import { Search, Bell, Settings, LogOut } from 'lucide-react';
-import Image from 'next/image';
-
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
+import { getSupabase, Contact } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 
 export function Navbar() {
   const { user, signOut } = useAuth();
+  const [profile, setProfile] = useState<{ initials: string; color: string } | null>(null);
+  const supabase = getSupabase();
+
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (!user?.email || !supabase) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select('initials, avatar_color')
+          .eq('email', user.email)
+          .single();
+
+        if (data) {
+          setProfile({
+            initials: data.initials || '',
+            color: data.avatar_color || 'bg-primary'
+          });
+        } else {
+          // Generate fallback initials from email
+          const initials = user.email.split('@')[0].slice(0, 2).toUpperCase();
+          setProfile({ initials, color: 'bg-primary' });
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    }
+
+    fetchUserProfile();
+  }, [user, supabase]);
 
   return (
     <header className="h-16 fixed top-0 right-0 left-0 bg-surface/80 backdrop-blur-md z-40 px-8 flex items-center justify-between border-b border-outline-variant/10">
@@ -18,9 +51,9 @@ export function Navbar() {
         
         <div className="hidden md:flex items-center gap-6 h-full">
           <nav className="flex items-center gap-6">
-            <a href="#" className="text-primary font-bold border-b-2 border-primary h-16 flex items-center px-1">Dashboard</a>
-            <a href="#" className="text-on-surface-variant hover:text-primary transition-colors h-16 flex items-center px-1">Leads</a>
-            <a href="#" className="text-on-surface-variant hover:text-primary transition-colors h-16 flex items-center px-1">Previsão</a>
+            <Link href="/" className="text-primary font-bold border-b-2 border-primary h-16 flex items-center px-1">Dashboard</Link>
+            <Link href="/contatos" className="text-on-surface-variant hover:text-primary transition-colors h-16 flex items-center px-1">Contatos</Link>
+            <Link href="/negocios" className="text-on-surface-variant hover:text-primary transition-colors h-16 flex items-center px-1">Negócios</Link>
           </nav>
         </div>
       </div>
@@ -47,22 +80,14 @@ export function Navbar() {
 
         <div className="flex items-center gap-3 pl-4 border-l border-outline-variant/15">
           <div className="text-right hidden lg:block">
-            <p className="text-sm font-bold leading-none truncate max-w-[150px]">{user?.email?.split('@')[0] || 'Carregando...'}</p>
-            <p className="text-[10px] text-on-surface-variant leading-none mt-1 uppercase tracking-widest">{user?.email || 'Acesso Restrito'}</p>
+            <p className="text-sm font-bold text-on-surface leading-none truncate max-w-[200px]">{user?.email || 'Carregando...'}</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-primary-container relative bg-primary/10 flex items-center justify-center">
-               {user?.email ? (
-                 <Image 
-                  src={`https://picsum.photos/seed/${user.id}/100/100`} 
-                  alt="Perfil" 
-                  fill
-                  className="object-cover"
-                  referrerPolicy="no-referrer"
-                />
-               ) : (
-                 <div className="text-primary font-black text-xs">EL</div>
-               )}
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center font-black text-xs transition-transform hover:scale-105 border-2 border-primary/10 shadow-sm text-white",
+              profile?.color || "bg-primary"
+            )}>
+              {profile?.initials || 'EL'}
             </div>
             <button 
               onClick={() => {

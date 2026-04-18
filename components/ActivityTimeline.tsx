@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 const activities = [
   { 
@@ -85,8 +86,4 @@ export function ActivityTimeline() {
       </div>
     </div>
   );
-}
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }
