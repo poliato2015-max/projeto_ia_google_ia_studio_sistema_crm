@@ -80,7 +80,8 @@ export function Navbar() {
 
         <div className="flex items-center gap-3 pl-4 border-l border-outline-variant/15">
           <div className="text-right hidden lg:block">
-            <p className="text-sm font-bold text-on-surface leading-none truncate max-w-[200px]">{user?.email || 'Carregando...'}</p>
+            <p className="text-sm font-bold text-on-surface leading-none truncate max-w-[200px] mb-1">{user?.email || 'Carregando...'}</p>
+            <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Acesso Ativo</p>
           </div>
           <div className="flex items-center gap-2">
             <div className={cn(

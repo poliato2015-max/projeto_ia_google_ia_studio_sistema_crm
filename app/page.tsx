@@ -1,5 +1,6 @@
 'use client';
 
+// v1.0.1 - Force rebuild to fix ChunkLoadError
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';

@@ -3,13 +3,31 @@
 import { useState, useMemo, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
-import { Loader2, Mail, Lock, ShieldCheck, ArrowRight, LayoutDashboard, Check, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Loader2, 
+  Mail, 
+  Lock, 
+  ShieldCheck, 
+  ArrowRight, 
+  LayoutDashboard, 
+  Check, 
+  X,
+  Eye,
+  EyeOff,
+  Users
+} from 'lucide-react';
 import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -35,19 +53,53 @@ export default function LoginPage() {
 
   const passwordRules = useMemo(() => {
     return [
-      { id: 'min-length', label: 'Pelo menos 6 caracteres', valid: password.length >= 6 },
+      { id: 'length', label: 'Exatamente 6 caracteres', valid: password.length === 6 },
       { id: 'upper', label: 'Uma letra maiúscula', valid: /[A-Z]/.test(password) },
       { id: 'lower', label: 'Uma letra minúscula', valid: /[a-z]/.test(password) },
       { id: 'number', label: 'Um número', valid: /[0-9]/.test(password) },
     ];
   }, [password]);
 
-  const isPasswordValid = passwordRules.every(rule => rule.valid);
-  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isFormValid = isEmailValid && isPasswordValid;
+  const maskPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const isPasswordValid = passwordRules.every(rule => rule.valid);
+  const passwordsMatch = password === confirmPassword;
+  
+  const isFullNameValid = useMemo(() => {
+    const parts = fullName.trim().split(/\s+/);
+    return parts.length >= 2 && parts.every(p => p.length >= 2) && fullName.length <= 30;
+  }, [fullName]);
+
+  const isPhoneValid = useMemo(() => {
+    const digits = phone.replace(/\D/g, '');
+    return digits.length === 11 && digits[2] === '9';
+  }, [phone]);
+
+  const isEmailValid = useMemo(() => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 50;
+  }, [email]);
+
+  const isFormValid = isSignUp 
+    ? (isEmailValid && isPasswordValid && passwordsMatch && isFullNameValid && isPhoneValid) 
+    : (isEmailValid && password.length > 0);
+
+  const [fieldErrors, setFieldErrors] = useState<{email?: string; phone?: string; name?: string}>({});
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSignUp) {
+      await handleSignUp();
+    } else {
+      await handleLogin();
+    }
+  };
+
+  const handleLogin = async () => {
     setLoading(true);
     setError(null);
     setSuccessMsg(null);
@@ -60,7 +112,16 @@ export default function LoginPage() {
         password,
       });
 
-      if (loginErr) throw loginErr;
+      if (loginErr) {
+        // Translate common Supabase errors to Portuguese
+        if (loginErr.message === 'Invalid login credentials') {
+          throw new Error('Credenciais inválidas.');
+        }
+        if (loginErr.message === 'Email not confirmed') {
+          throw new Error('E-mail ainda não confirmado. Verifique sua caixa de entrada.');
+        }
+        throw loginErr;
+      }
       
       setSuccessMsg('Entrando...');
       setLoading(false);
@@ -75,37 +136,58 @@ export default function LoginPage() {
   };
 
   const handleSignUp = async () => {
-    if (!isPasswordValid) return;
+    if (!isPasswordValid || !passwordsMatch) {
+      if (!passwordsMatch) setError('As senhas não coincidem.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setSuccessMsg(null);
     
-    // Timeout fallback
-    const timeout = setTimeout(() => {
-      if (loading) {
-        setLoading(false);
-        setError('O cadastro falhou por demorar demais.');
-      }
-    }, 12000);
-
     try {
       if (!supabase) throw new Error('Supabase offline.');
+      setFieldErrors({});
 
-      const { error: signUpErr } = await supabase.auth.signUp({
+      const { data, error: signUpErr } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: window.location.origin
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_name: fullName,
+            phone: phone
+          }
         }
       });
 
-      clearTimeout(timeout);
+      if (signUpErr) {
+        if (signUpErr.message.toLowerCase().includes('already registered')) {
+          setFieldErrors({ email: 'Este e-mail já está em uso.' });
+          return;
+        }
+        if (signUpErr.message.toLowerCase().includes('email rate limit exceeded')) {
+          throw new Error('Limite de envios de e-mail excedido. Aguarde alguns minutos e tente novamente.');
+        }
+        throw signUpErr;
+      }
 
-      if (signUpErr) throw signUpErr;
+      // Check if user already exists but Supabase is hiding it (User Enumeration Protection)
+      if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+        setFieldErrors({ email: 'Este e-mail já está em uso.' });
+        return;
+      }
+
       setSuccessMsg('Conta criada! Verifique seu e-mail (incluindo SPAM).');
+      
+      // Clear form after success
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setFullName('');
+      setPhone('');
+      setFieldErrors({});
     } catch (err: any) {
-      clearTimeout(timeout);
       setError(err.message || 'Erro ao realizar cadastro.');
     } finally {
       setLoading(false);
@@ -163,12 +245,77 @@ export default function LoginPage() {
                 <ShieldCheck size={24} className="text-white" />
               </div>
             </div>
-            <h2 className="text-4xl font-black font-headline text-on-surface tracking-tight">Bem-vindo.</h2>
-            <p className="text-on-surface-variant mt-2 font-medium italic serif">Acesse o portal para gerenciar seu pipeline.</p>
+            <h2 className="text-4xl font-black font-headline text-on-surface tracking-tight">
+              {isSignUp ? 'Criar Conta' : 'Bem-vindo.'}
+            </h2>
+            <p className="text-on-surface-variant mt-2 font-medium italic serif">
+              {isSignUp ? 'Cadastre-se para acessar o portal.' : 'Acesse o portal para gerenciar seu pipeline.'}
+            </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
+              <AnimatePresence>
+                {isSignUp && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="space-y-4 overflow-hidden"
+                  >
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                        <Users size={18} />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Nome e Sobrenome"
+                        required
+                        value={fullName}
+                        onChange={(e) => {
+                          const val = e.target.value
+                            .replace(/[^a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]/g, '')
+                            .replace(/\s+/g, ' ')
+                            .slice(0, 30);
+                          setFullName(val);
+                        }}
+                        className={cn(
+                          "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
+                          fullName && !isFullNameValid ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
+                        )}
+                      />
+                      {fullName && !isFullNameValid && (
+                        <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">
+                          {fullName.length > 30 ? "Máximo 30 caracteres." : "Insira seu nome completo (apenas letras)."}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                         <div className="flex items-center justify-center w-[18px] h-[18px]">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.27-2.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                         </div>
+                      </div>
+                      <input
+                        type="tel"
+                        placeholder="Telefone (DDD + 9 dígitos)"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(maskPhone(e.target.value))}
+                        className={cn(
+                          "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
+                          phone && !isPhoneValid ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
+                        )}
+                      />
+                      {phone && !isPhoneValid && (
+                        <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">Formato: (XX) 9XXXX-XXXX</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
                   <Mail size={18} />
@@ -178,43 +325,121 @@ export default function LoginPage() {
                   placeholder="E-mail profissional"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9-@.]/g, '').slice(0, 50);
+                    setEmail(val);
+                    if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
+                  }}
+                  className={cn(
+                    "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
+                    fieldErrors.email ? "border-error" : "border-outline-variant/30 focus:border-primary"
+                  )}
                 />
+                {fieldErrors.email && (
+                  <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">{fieldErrors.email}</p>
+                )}
               </div>
 
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                  <Lock size={18} />
+              <div className="space-y-2">
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                    <Lock size={18} />
+                  </div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder={isSignUp ? "Crie uma senha forte" : "Senha"}
+                    required
+                    value={password}
+                    maxLength={6}
+                    onChange={(e) => setPassword(e.target.value.slice(0, 6))}
+                    className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
-                <input
-                  type="password"
-                  placeholder="Senha"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary transition-all font-medium text-on-surface"
-                />
+
+                <AnimatePresence>
+                  {isSignUp && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="relative group mt-2">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                          <Lock size={18} />
+                        </div>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Repetir senha"
+                          required
+                          value={confirmPassword}
+                          maxLength={6}
+                          onChange={(e) => setConfirmPassword(e.target.value.slice(0, 6))}
+                          className={cn(
+                            "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-12 outline-none transition-all font-medium text-on-surface",
+                            confirmPassword && !passwordsMatch ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                        {confirmPassword && !passwordsMatch && (
+                          <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">As senhas não coincidem.</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {!isSignUp && (
+                  <button 
+                    type="button"
+                    className="text-xs font-bold text-primary hover:text-primary-dim transition-colors px-1"
+                  >
+                    Esqueceu sua senha?
+                  </button>
+                )}
               </div>
 
-              {/* Password Requirements UI */}
-              <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Requisitos de Senha</p>
-                <div className="grid grid-cols-1 gap-1">
-                  {passwordRules.map((rule) => (
-                    <div key={rule.id} className="flex items-center gap-2 text-[11px] font-bold">
-                      {rule.valid ? (
-                        <Check size={12} className="text-success" />
-                      ) : (
-                        <X size={12} className="text-on-surface-variant/40" />
-                      )}
-                      <span className={rule.valid ? "text-on-surface" : "text-on-surface-variant/60"}>
-                        {rule.label}
-                      </span>
+              {/* Password Requirements UI - Only show during Signup */}
+              <AnimatePresence>
+                {isSignUp && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Requisitos de Senha</p>
+                      <div className="grid grid-cols-1 gap-1">
+                        {passwordRules.map((rule) => (
+                          <div key={rule.id} className="flex items-center gap-2 text-[11px] font-bold">
+                            {rule.valid ? (
+                              <Check size={12} className="text-success" />
+                            ) : (
+                              <X size={12} className="text-on-surface-variant/40" />
+                            )}
+                            <span className={rule.valid ? "text-on-surface" : "text-on-surface-variant/60"}>
+                              {rule.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {error && (
@@ -253,7 +478,7 @@ export default function LoginPage() {
             )}
 
             {!isExistingSession && (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-6 items-center">
                 <button
                   type="submit"
                   disabled={loading || !isFormValid}
@@ -261,30 +486,31 @@ export default function LoginPage() {
                 >
                   {loading ? <Loader2 className="animate-spin" size={20} /> : (
                     <>
-                      ENTRAR NO SISTEMA
+                      {isSignUp ? 'CRIAR CONTA' : 'ACESSAR'}
                       <ArrowRight size={16} />
                     </>
                   )}
                 </button>
                 
-                <button
-                  type="button"
-                  onClick={handleSignUp}
-                  disabled={loading || !isPasswordValid}
-                  className="w-full border-2 border-outline-variant/30 text-on-surface font-bold py-4 rounded-2xl text-xs uppercase tracking-widest hover:bg-surface-container-low transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  CRIAR NOVA CONTA
-                </button>
+                <p className="text-sm font-bold text-on-surface">
+                  {isSignUp ? 'Já tem um login?' : 'Não tem um login?'} 
+                  <button 
+                    type="button"
+                    onClick={() => setIsSignUp(!isSignUp)}
+                    className="ml-2 text-primary hover:text-primary-dim transition-colors"
+                  >
+                    {isSignUp ? 'Entre aqui' : 'Cadastre-se'}
+                  </button>
+                </p>
               </div>
             )}
           </form>
 
-          <div className="pt-6 border-t border-outline-variant/20 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+          <div className="pt-6 border-t border-outline-variant/20 flex justify-center items-center text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
             <span className="flex items-center gap-2">
               <LayoutDashboard size={12} className="text-primary" />
               PORTAL SEGURO
             </span>
-            <span className="opacity-50 hover:opacity-100 cursor-pointer">Esqueceu a senha?</span>
           </div>
         </motion.div>
       </div>
