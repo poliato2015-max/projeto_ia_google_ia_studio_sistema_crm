@@ -21,25 +21,39 @@ export async function middleware(request: NextRequest) {
       path: '/',
     },
     cookies: {
-      getAll() { return request.cookies.getAll() },
+      getAll() {
+        return request.cookies.getAll()
+      },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-        response = NextResponse.next({ request })
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        )
+        response = NextResponse.next({
+          request,
+        })
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, { 
-            ...options, 
-            sameSite: 'none', 
-            secure: true, 
-            path: '/' 
+          response.cookies.set(name, value, {
+            ...options,
+            sameSite: 'none',
+            secure: true,
+            path: '/',
           })
         )
       },
     },
   })
 
-  const { data: { session } } = await supabase.auth.getSession()
   const pathname = request.nextUrl.pathname
-  const isPublic = pathname === '/login' || pathname.startsWith('/_next') || pathname.includes('.')
+  const isPublic = pathname === '/login' || 
+                   pathname.startsWith('/_next') || 
+                   pathname.includes('.') || 
+                   pathname.startsWith('/api')
+
+  if (isPublic) {
+    return response
+  }
+
+  const { data: { session } } = await supabase.auth.getSession()
 
   if (!session && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))

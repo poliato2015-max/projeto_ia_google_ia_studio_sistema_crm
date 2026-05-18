@@ -66,3 +66,14 @@ export type Deal = {
   // Join data
   contact?: Contact;
 };
+
+export type Task = {
+  id: string;
+  created_at: string;
+  title: string;
+  due_date: string;
+  priority: 'Alta' | 'Média' | 'Baixa';
+  status: 'pendente' | 'em_progresso' | 'concluída' | 'atrasada';
+  user_id: string;
+  updated_at?: string;
+};
