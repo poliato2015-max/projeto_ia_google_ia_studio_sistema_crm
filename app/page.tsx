@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const { loading: authLoading, session } = useAuth();
+  const { loading: authLoading, session, user } = useAuth();
   const configured = isSupabaseConfigured();
   
   // Memoize supabase client
@@ -37,8 +37,8 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!supabase) {
-      console.warn('Dashboard: Supabase client not available.');
+    if (!supabase || !user) {
+      console.warn('Dashboard: Supabase client or user not available.');
       setLoading(false);
       return;
     }
@@ -55,8 +55,8 @@ export default function DashboardPage() {
       }, 8000);
 
       const [contRes, dealRes] = await Promise.all([
-        supabase.from('contacts').select('*'),
-        supabase.from('deals').select('*, contact:contacts(*)').order('created_at', { ascending: false })
+        supabase.from('contacts').select('*').eq('user_id', user.id),
+        supabase.from('deals').select('*, contact:contacts(*)').eq('user_id', user.id).order('created_at', { ascending: false })
       ]);
 
       clearTimeout(timeoutId);
@@ -78,7 +78,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, configured]);
+  }, [supabase, configured, user]);
 
   useEffect(() => {
     // Only fetch when auth state is stable
@@ -99,14 +99,13 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   const getSalesGrowthData = () => {
-    if (!deals.length) return undefined;
-    
     const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-    const grouped = deals.reduce((acc: any, deal) => {
+    const closedDeals = deals.filter(deal => deal.stage === 'Fechado');
+    const grouped = closedDeals.reduce((acc: any, deal) => {
       const date = new Date(deal.created_at);
       const monthIndex = date.getMonth();
       const monthName = months[monthIndex];
-      acc[monthName] = (acc[monthName] || 0) + deal.value;
+      acc[monthName] = (acc[monthName] || 0) + (deal.value || 0);
       return acc;
     }, {});
 
@@ -122,7 +121,6 @@ export default function DashboardPage() {
   };
 
   const getLeadDistributionData = () => {
-    if (!contacts.length) return undefined;
     const grouped = contacts.reduce((acc: any, contact) => {
       acc[contact.status] = (acc[contact.status] || 0) + 1;
       return acc;
@@ -210,7 +208,7 @@ export default function DashboardPage() {
             <KPICard 
               label="Receita Pipeline" 
               value={`$${(stats.totalRevenue / 1000).toFixed(1)}k`} 
-              trend="+14.2%" 
+              trend={stats.totalRevenue > 0 ? "+14.2%" : ""} 
               isPositive={true}
               variant="primary"
               icon={TrendingUp}
@@ -218,21 +216,21 @@ export default function DashboardPage() {
             <KPICard 
               label="Leads Ativos" 
               value={stats.activeLeads.toString()} 
-              trend="+5.1%" 
+              trend={stats.activeLeads > 0 ? "+5.1%" : ""} 
               isPositive={true}
               icon={Users}
             />
             <KPICard 
               label="Taxa de Conversão" 
               value={`${stats.conversionRate}%`} 
-              trend="-2.4%" 
+              trend={stats.conversionRate > 0 ? "-2.4%" : ""} 
               isPositive={false}
               icon={Target}
             />
             <KPICard 
               label="Negócios Abertos" 
               value={stats.openDeals.toString()} 
-              trend="+12%" 
+              trend={stats.openDeals > 0 ? "+12%" : ""} 
               isPositive={true}
               icon={Handshake}
             />

@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { Contact, getSupabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/components/AuthProvider';
 
 interface ContactFormProps {
   contact?: Contact | null;
@@ -16,6 +17,7 @@ interface ContactFormProps {
 export function ContactForm({ contact, isOpen, onClose, onSave }: ContactFormProps) {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
+  const { user } = useAuth();
   const [formData, setFormData] = useState<Partial<Contact>>({
     name: '',
     email: '',
@@ -43,11 +45,16 @@ export function ContactForm({ contact, isOpen, onClose, onSave }: ContactFormPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user || !supabase) {
+      alert('Sessão expirada. Por favor, faça login novamente.');
+      return;
+    }
     setLoading(true);
 
     try {
       const dataToSave = {
         ...formData,
+        user_id: user.id,
         initials: formData.name ? formData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '',
         avatar_color: contact?.avatar_color || `bg-${['primary', 'secondary', 'error', 'on-surface'][Math.floor(Math.random() * 4)]}-container`,
       };
@@ -56,7 +63,8 @@ export function ContactForm({ contact, isOpen, onClose, onSave }: ContactFormPro
         const { error } = await supabase
           .from('contacts')
           .update(dataToSave)
-          .eq('id', contact.id);
+          .eq('id', contact.id)
+          .eq('user_id', user.id);
         if (error) throw error;
       } else {
         const { error } = await supabase

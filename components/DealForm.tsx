@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Contact, Deal, getSupabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '@/components/AuthProvider';
 
 interface DealFormProps {
   deal?: Deal | null;
@@ -15,6 +16,7 @@ interface DealFormProps {
 export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const { user } = useAuth();
   const [formData, setFormData] = useState<Partial<Deal>>(
     deal || {
       title: '',
@@ -29,25 +31,44 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
   const supabase = getSupabase();
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && user && supabase) {
       const fetchContacts = async () => {
-        const { data } = await supabase.from('contacts').select('*').order('name');
+        const { data } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('name');
         setContacts(data || []);
       };
       fetchContacts();
     }
-  }, [isOpen, supabase]);
+  }, [isOpen, supabase, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user || !supabase) {
+      alert('Sessão expirada. Por favor, faça login novamente.');
+      return;
+    }
     setLoading(true);
 
     try {
+      const dataToSave = {
+        ...formData,
+        user_id: user.id
+      };
+
       if (deal?.id) {
-        const { error } = await supabase.from('deals').update(formData).eq('id', deal.id);
+        const { error } = await supabase
+          .from('deals')
+          .update(dataToSave)
+          .eq('id', deal.id)
+          .eq('user_id', user.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('deals').insert([formData]);
+        const { error } = await supabase
+          .from('deals')
+          .insert([dataToSave]);
         if (error) throw error;
       }
       onSave();

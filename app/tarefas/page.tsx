@@ -56,7 +56,7 @@ export default function TasksPage() {
 
   const toggleTask = async (e: React.MouseEvent, task: Task) => {
     e.stopPropagation();
-    if (!supabase) return;
+    if (!supabase || !user) return;
     const newStatus = task.status === 'concluída' ? 'pendente' : 'concluída';
     const now = new Date().toISOString();
     try {
@@ -66,7 +66,8 @@ export default function TasksPage() {
           status: newStatus,
           updated_at: now
         })
-        .eq('id', task.id);
+        .eq('id', task.id)
+        .eq('user_id', user.id);
       
       if (error) throw error;
       setTasks(tasks.map(t => t.id === task.id ? { ...t, status: newStatus as any, updated_at: now } : t));
@@ -77,14 +78,15 @@ export default function TasksPage() {
 
   const deleteTask = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!supabase) return;
+    if (!supabase || !user) return;
 
     try {
       setLoading(true);
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
       
       if (error) throw error;
       setTasks(prev => prev.filter(t => t.id !== id));

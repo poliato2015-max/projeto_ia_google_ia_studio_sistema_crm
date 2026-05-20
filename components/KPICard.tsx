@@ -36,13 +36,19 @@ export function KPICard({ label, value, trend, isPositive, icon, variant = 'neut
         </div>
       </div>
 
-      <div className={cn(
-        "flex items-center gap-2 font-bold text-xs",
-        isPositive ? "text-primary" : "text-error"
-      )}>
-        {isPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-        <span>{trend}</span>
-      </div>
+      {trend ? (
+        <div className={cn(
+          "flex items-center gap-2 font-bold text-xs",
+          isPositive ? "text-primary" : "text-error"
+        )}>
+          {isPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+          <span>{trend}</span>
+        </div>
+      ) : (
+        <div className="text-[10px] font-semibold text-on-surface-variant/35 uppercase tracking-wider">
+          Sem dados históricos
+        </div>
+      )}
 
       {/* Background decoration */}
       <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">

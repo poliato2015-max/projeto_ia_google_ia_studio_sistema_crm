@@ -8,9 +8,11 @@ CREATE TABLE IF NOT EXISTS deals (
   probability INTEGER DEFAULT 20,
   expected_close_date DATE,
   contact_id UUID REFERENCES contacts(id) ON DELETE CASCADE,
-  health_score INTEGER DEFAULT 100 -- 0 to 100
+  health_score INTEGER DEFAULT 100, -- 0 to 100
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid()
 );
 
 -- RLS
 ALTER TABLE deals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all for deals" ON deals FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can fully manage their own deals" ON deals 
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);

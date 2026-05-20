@@ -10,12 +10,12 @@ CREATE TABLE IF NOT EXISTS contacts (
   value NUMERIC DEFAULT 0,
   initials TEXT,
   avatar_color TEXT,
-  image TEXT
+  image TEXT,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid()
 );
 
 -- Set up Row Level Security (RLS)
--- For this applet, we'll allow all operations for now (can be hardened later)
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow all operations for now" ON contacts
-  FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can fully manage their own contacts" ON contacts
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);

@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { getSupabase, Contact, isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  const { user, loading: authLoading } = useAuth();
   const configured = isSupabaseConfigured();
   const supabase = getSupabase();
 
@@ -40,11 +42,16 @@ export default function ContactsPage() {
       setLoading(false);
       return;
     }
+    if (!supabase || !user) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const { data, error, status, statusText } = await supabase
+      const { data, error } = await supabase
         .from('contacts')
         .select('*')
+        .eq('user_id', user.id)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -54,24 +61,28 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, configured]);
+  }, [supabase, configured, user]);
 
   useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+    if (!authLoading) {
+      fetchContacts();
+    }
+  }, [authLoading, fetchContacts]);
 
   const handleDelete = async (id: string) => {
     if (!configured) {
       alert('Supabase não configurado.');
       return;
     }
+    if (!user || !supabase) return;
     if (!confirm('Tem certeza que deseja excluir este contato?')) return;
     
     try {
       const { error } = await supabase
         .from('contacts')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
       
       if (error) throw error;
       fetchContacts();

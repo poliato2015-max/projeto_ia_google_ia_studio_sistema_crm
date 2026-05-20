@@ -28,6 +28,8 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -50,6 +52,52 @@ export default function LoginPage() {
     checkSession();
     return () => { isMounted = false; };
   }, [supabase]);
+
+  // Check for recovery type in URL to trigger reset mode and handle potential link errors
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let params = new URLSearchParams(window.location.search);
+      // Try to parse hash fragment params if query parameters are empty
+      if (!params.get('error') && !params.get('type') && window.location.hash) {
+        const hashStr = window.location.hash.substring(1);
+        params = new URLSearchParams(hashStr);
+      }
+
+      const urlError = params.get('error');
+      const errorCode = params.get('error_code');
+      const errorDesc = params.get('error_description');
+
+      if (urlError || errorCode) {
+        try {
+          window.sessionStorage.removeItem('is_recovering');
+        } catch (e) {}
+        
+        if (errorCode === 'otp_expired' || (errorDesc && errorDesc.toLowerCase().includes('expired')) || urlError === 'access_denied') {
+          setError('O link de recuperação de senha expirou ou já foi utilizado. Por favor, solicite uma nova recuperação.');
+        } else if (errorDesc) {
+          setError(decodeURIComponent(errorDesc).replace(/\+/g, ' '));
+        } else {
+          setError('Houve um erro ao processar o link de acesso.');
+        }
+        setIsForgotPassword(true);
+        // Clear history so refreshing/interacting doesn't keep showing the error URL state
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      let isRecoveringSession = false;
+      try {
+        isRecoveringSession = window.sessionStorage.getItem('is_recovering') === 'true';
+      } catch (e) {}
+
+      if (params.get('type') === 'recovery' || window.location.hash.includes('type=recovery') || isRecoveringSession) {
+        setIsResetPassword(true);
+        try {
+          window.sessionStorage.setItem('is_recovering', 'true');
+        } catch (e) {}
+      }
+    }
+  }, []);
 
   const passwordRules = useMemo(() => {
     return [
@@ -84,18 +132,102 @@ export default function LoginPage() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 50;
   }, [email]);
 
-  const isFormValid = isSignUp 
-    ? (isEmailValid && isPasswordValid && passwordsMatch && isFullNameValid && isPhoneValid) 
-    : (isEmailValid && password.length > 0);
+  const isFormValid = useMemo(() => {
+    if (isResetPassword) {
+      return isPasswordValid && passwordsMatch;
+    }
+    if (isForgotPassword) {
+      return isEmailValid;
+    }
+    if (isSignUp) {
+      return isEmailValid && isPasswordValid && passwordsMatch && isFullNameValid && isPhoneValid;
+    }
+    return isEmailValid && password.length > 0;
+  }, [isResetPassword, isForgotPassword, isSignUp, isEmailValid, isPasswordValid, passwordsMatch, isFullNameValid, isPhoneValid, password]);
 
   const [fieldErrors, setFieldErrors] = useState<{email?: string; phone?: string; name?: string}>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSignUp) {
+    if (isResetPassword) {
+      await handleResetPassword();
+    } else if (isForgotPassword) {
+      await handleForgotPassword();
+    } else if (isSignUp) {
       await handleSignUp();
     } else {
       await handleLogin();
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      if (!supabase) throw new Error('Serviço indisponível.');
+      
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login?type=recovery`,
+      });
+      
+      if (resetErr) {
+        if (resetErr.message.toLowerCase().includes('rate limit')) {
+          throw new Error('Limite de envios excedido. Tente novamente em alguns minutos.');
+        }
+        throw resetErr;
+      }
+      
+      setSuccessMsg('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao enviar e-mail de recuperação.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!isPasswordValid || !passwordsMatch) {
+      if (!passwordsMatch) setError('As senhas não coincidem.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      if (!supabase) throw new Error('Serviço indisponível.');
+      
+      const { error: updateErr } = await supabase.auth.updateUser({
+        password: password,
+      });
+      
+      if (updateErr) throw updateErr;
+      
+      setSuccessMsg('Sua senha foi atualizada com sucesso! Por favor, realize o login com a sua nova senha.');
+      try {
+        window.sessionStorage.removeItem('is_recovering');
+      } catch (e) {}
+
+      // Limpar sessão local de recuperação imediatamente no Supabase e no estado local
+      try {
+        await supabase.auth.signOut();
+        setIsExistingSession(false);
+      } catch (e) {}
+
+      setTimeout(() => {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setIsResetPassword(false);
+        setIsForgotPassword(false);
+        setIsSignUp(false);
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setSuccessMsg(null);
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar a senha.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -246,10 +378,16 @@ export default function LoginPage() {
               </div>
             </div>
             <h2 className="text-4xl font-black font-headline text-on-surface tracking-tight">
-              {isSignUp ? 'Criar Conta' : 'Bem-vindo.'}
+              {isResetPassword ? 'Nova Senha' : isForgotPassword ? 'Recuperar Senha' : isSignUp ? 'Criar Conta' : 'Bem-vindo.'}
             </h2>
             <p className="text-on-surface-variant mt-2 font-medium italic serif">
-              {isSignUp ? 'Cadastre-se para acessar o portal.' : 'Acesse o portal para gerenciar seu pipeline.'}
+              {isResetPassword 
+                ? 'Defina sua nova senha de acesso.' 
+                : isForgotPassword 
+                  ? 'Informe seu e-mail para receber as instruções de recuperação.'
+                  : isSignUp 
+                    ? 'Cadastre-se para acessar o portal.' 
+                    : 'Acesse o portal para gerenciar seu pipeline.'}
             </p>
           </div>
 
@@ -316,130 +454,142 @@ export default function LoginPage() {
                 )}
               </AnimatePresence>
 
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                  <Mail size={18} />
-                </div>
-                <input
-                  type="email"
-                  placeholder="E-mail profissional"
-                  required
-                  value={email}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^a-zA-Z0-9-@.]/g, '').slice(0, 50);
-                    setEmail(val);
-                    if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
-                  }}
-                  className={cn(
-                    "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
-                    fieldErrors.email ? "border-error" : "border-outline-variant/30 focus:border-primary"
-                  )}
-                />
-                {fieldErrors.email && (
-                  <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">{fieldErrors.email}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
+              {!isResetPassword && (
                 <div className="relative group">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                    <Lock size={18} />
+                    <Mail size={18} />
                   </div>
                   <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder={isSignUp ? "Crie uma senha forte" : "Senha"}
+                    type="email"
+                    placeholder="E-mail profissional"
                     required
-                    value={password}
-                    maxLength={6}
-                    onChange={(e) => setPassword(e.target.value.slice(0, 6))}
-                    className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                    value={email}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^a-zA-Z0-9-@._+]/g, '').slice(0, 50);
+                      setEmail(val);
+                      if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
+                    }}
+                    className={cn(
+                      "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
+                      fieldErrors.email ? "border-error" : "border-outline-variant/30 focus:border-primary"
+                    )}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-
-                <AnimatePresence>
-                  {isSignUp && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="relative group mt-2">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
-                          <Lock size={18} />
-                        </div>
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Repetir senha"
-                          required
-                          value={confirmPassword}
-                          maxLength={6}
-                          onChange={(e) => setConfirmPassword(e.target.value.slice(0, 6))}
-                          className={cn(
-                            "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-12 outline-none transition-all font-medium text-on-surface",
-                            confirmPassword && !passwordsMatch ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
-                          )}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
-                        >
-                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                        {confirmPassword && !passwordsMatch && (
-                          <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">As senhas não coincidem.</p>
-                        )}
-                      </div>
-                    </motion.div>
+                  {fieldErrors.email && (
+                    <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">{fieldErrors.email}</p>
                   )}
-                </AnimatePresence>
-                {!isSignUp && (
-                  <button 
-                    type="button"
-                    className="text-xs font-bold text-primary hover:text-primary-dim transition-colors px-1"
-                  >
-                    Esqueceu sua senha?
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* Password Requirements UI - Only show during Signup */}
-              <AnimatePresence>
-                {isSignUp && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Requisitos de Senha</p>
-                      <div className="grid grid-cols-1 gap-1">
-                        {passwordRules.map((rule) => (
-                          <div key={rule.id} className="flex items-center gap-2 text-[11px] font-bold">
-                            {rule.valid ? (
-                              <Check size={12} className="text-success" />
-                            ) : (
-                              <X size={12} className="text-on-surface-variant/40" />
-                            )}
-                            <span className={rule.valid ? "text-on-surface" : "text-on-surface-variant/60"}>
-                              {rule.label}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+              {!isForgotPassword && (
+                <div className="space-y-4">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                      <Lock size={18} />
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder={isResetPassword ? "Defina sua nova senha" : isSignUp ? "Crie uma senha forte" : "Senha"}
+                      required
+                      value={password}
+                      maxLength={6}
+                      onChange={(e) => setPassword(e.target.value.slice(0, 6))}
+                      className="w-full bg-surface-container-low border-2 border-outline-variant/30 rounded-2xl py-4 pl-12 pr-12 outline-none focus:border-primary transition-all font-medium text-on-surface"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+
+                  <AnimatePresence>
+                    {(isSignUp || isResetPassword) && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="relative group">
+                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant group-focus-within:text-primary transition-colors">
+                            <Lock size={18} />
+                          </div>
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Repetir senha"
+                            required
+                            value={confirmPassword}
+                            maxLength={6}
+                            onChange={(e) => setConfirmPassword(e.target.value.slice(0, 6))}
+                            className={cn(
+                              "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-12 outline-none transition-all font-medium text-on-surface",
+                              confirmPassword && !passwordsMatch ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors"
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                          {confirmPassword && !passwordsMatch && (
+                            <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">As senhas não coincidem.</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {!isSignUp && !isResetPassword && (
+                    <div className="flex justify-end">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsForgotPassword(true);
+                          setError(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="text-xs font-bold text-primary hover:text-primary-dim transition-colors px-1"
+                      >
+                        Esqueceu sua senha?
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Password Requirements UI */}
+                  <AnimatePresence>
+                    {(isSignUp || isResetPassword) && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-4 bg-surface-container-low rounded-2xl border border-outline-variant/10 space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Requisitos de Senha</p>
+                          <div className="grid grid-cols-1 gap-1">
+                            {passwordRules.map((rule) => (
+                              <div key={rule.id} className="flex items-center gap-2 text-[11px] font-bold">
+                                {rule.valid ? (
+                                  <Check size={12} className="text-success" />
+                                ) : (
+                                  <X size={12} className="text-on-surface-variant/40" />
+                                )}
+                                <span className={rule.valid ? "text-on-surface" : "text-on-surface-variant/60"}>
+                                  {rule.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -466,7 +616,7 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            {isExistingSession && (
+            {isExistingSession && !isResetPassword && !isForgotPassword && (
               <button
                 type="button"
                 onClick={() => window.location.href = '/'}
@@ -477,7 +627,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {!isExistingSession && (
+            {(!isExistingSession || isResetPassword || isForgotPassword) && (
               <div className="flex flex-col gap-6 items-center">
                 <button
                   type="submit"
@@ -486,21 +636,65 @@ export default function LoginPage() {
                 >
                   {loading ? <Loader2 className="animate-spin" size={20} /> : (
                     <>
-                      {isSignUp ? 'CRIAR CONTA' : 'ACESSAR'}
+                      {isResetPassword 
+                        ? 'SALVAR NOVA SENHA' 
+                        : isForgotPassword 
+                          ? 'ENVIAR INSTRUÇÕES' 
+                          : isSignUp 
+                            ? 'CRIAR CONTA' 
+                            : 'ACESSAR'}
                       <ArrowRight size={16} />
                     </>
                   )}
                 </button>
                 
-                <p className="text-sm font-bold text-on-surface">
-                  {isSignUp ? 'Já tem um login?' : 'Não tem um login?'} 
-                  <button 
-                    type="button"
-                    onClick={() => setIsSignUp(!isSignUp)}
-                    className="ml-2 text-primary hover:text-primary-dim transition-colors"
-                  >
-                    {isSignUp ? 'Entre aqui' : 'Cadastre-se'}
-                  </button>
+                <p className="text-sm font-bold text-on-surface flex items-center gap-1 flex-wrap justify-center">
+                  {isResetPassword ? null : isForgotPassword ? (
+                    <>
+                      <span>Lembra da sua senha?</span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsForgotPassword(false);
+                          setError(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="text-primary hover:text-primary-dim transition-colors"
+                      >
+                        Fazer Login
+                      </button>
+                    </>
+                  ) : isSignUp ? (
+                    <>
+                      <span>Já tem um login?</span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsSignUp(false);
+                          setError(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="text-primary hover:text-primary-dim transition-colors"
+                      >
+                        Entre aqui
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span>Não tem um login?</span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsSignUp(true);
+                          setError(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="text-primary hover:text-primary-dim transition-colors"
+                      >
+                        Cadastre-se
+                      </button>
+                    </>
+                  )}
                 </p>
               </div>
             )}

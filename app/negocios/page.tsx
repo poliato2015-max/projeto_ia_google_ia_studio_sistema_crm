@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSupabase, Deal, isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,11 +30,16 @@ export default function DealsPage() {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const { user, loading: authLoading } = useAuth();
   const configured = isSupabaseConfigured();
   const supabase = getSupabase();
 
   const fetchDeals = useCallback(async () => {
     if (!configured) {
+      setLoading(false);
+      return;
+    }
+    if (!supabase || !user) {
       setLoading(false);
       return;
     }
@@ -45,6 +51,7 @@ export default function DealsPage() {
           *,
           contact:contacts (*)
         `)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -54,16 +61,23 @@ export default function DealsPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, configured]);
+  }, [supabase, configured, user]);
 
   useEffect(() => {
-    fetchDeals();
-  }, [fetchDeals]);
+    if (!authLoading) {
+      fetchDeals();
+    }
+  }, [authLoading, fetchDeals]);
 
   const handleDelete = async (id: string) => {
+    if (!user || !supabase) return;
     if (!confirm('Excluir este negócio permanentemente?')) return;
     try {
-      const { error } = await supabase.from('deals').delete().eq('id', id);
+      const { error } = await supabase
+        .from('deals')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
       if (error) throw error;
       fetchDeals();
     } catch (error) {

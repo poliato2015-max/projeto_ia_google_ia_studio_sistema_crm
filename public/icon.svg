@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c56d0" />
+      <stop offset="100%" stop-color="#004aba" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="100" height="100" rx="30" fill="url(#blueGrad)" />
+  <!-- Lens Rings -->
+  <circle cx="50" cy="50" r="28" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.4" />
+  <circle cx="50" cy="50" r="18" fill="none" stroke="#ffffff" stroke-width="6" />
+  <circle cx="50" cy="50" r="8" fill="#ffffff" />
+  <!-- Shield/Target ticks -->
+  <path d="M50 12 L50 22 M50 78 L50 88 M12 50 L22 50 M78 50 L88 50" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+</svg>

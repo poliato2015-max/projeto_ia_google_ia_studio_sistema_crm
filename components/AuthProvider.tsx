@@ -29,6 +29,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (!loading && user && pathname === '/login') {
+      // If we are in password recovery flow or there's an active error,
+      // do NOT automatically redirect to dashboard.
+      let isRecovery = false;
+      if (typeof window !== 'undefined') {
+        const searchParams = new URLSearchParams(window.location.search);
+        let hashParams = new URLSearchParams();
+        if (window.location.hash) {
+          hashParams = new URLSearchParams(window.location.hash.substring(1));
+        }
+        
+        let hasSessionStorageRecovery = false;
+        try {
+          hasSessionStorageRecovery = window.sessionStorage.getItem('is_recovering') === 'true';
+        } catch (e) {}
+
+        isRecovery = searchParams.get('type') === 'recovery' || 
+                     hashParams.get('type') === 'recovery' ||
+                     searchParams.has('error') || 
+                     hashParams.has('error') ||
+                     searchParams.has('error_code') ||
+                     hashParams.has('error_code') ||
+                     hasSessionStorageRecovery;
+      }
+
+      if (isRecovery) {
+        console.log('AuthProvider: Active password recovery or error state detected in URL, preventing auto-redirect to dashboard.');
+        return;
+      }
+
       console.log('AuthProvider: Logged in user on login page, forcing redirect to dashboard...');
       window.location.href = '/';
     }
@@ -81,6 +110,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.log('AuthProvider: authStateChange event:', event, 'Session:', !!currentSession);
         if (!isMounted) return;
         
+        if (event === 'PASSWORD_RECOVERY') {
+          try {
+            window.sessionStorage.setItem('is_recovering', 'true');
+          } catch (e) {}
+        }
+
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         setLoading(false);

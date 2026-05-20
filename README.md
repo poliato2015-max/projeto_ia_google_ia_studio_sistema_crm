@@ -1,6 +1,6 @@
 # 🤖 Executive Lens — CRM com Google AI Studio
 
-> Plataforma de CRM para líderes que buscam clareza, precisão e performance em tempo real — desenvolvida com Google AI Studio (Gemini), Supabase e Vercel.
+Plataforma de CRM para líderes que buscam clareza, precisão e performance em tempo real — desenvolvida com Google AI Studio (Gemini), Supabase e Vercel.
 
 [![Google AI Studio](https://img.shields.io/badge/Built%20with-Google%20AI%20Studio-orange)](https://aistudio.google.com)
 [![Gemini](https://img.shields.io/badge/IA-Gemini-blue)](https://ai.google.dev)
@@ -26,7 +26,7 @@ O Gemini foi utilizado como **copiloto de desenvolvimento** em todas as etapas: 
 |---|---|---|
 | 🤖 **IA como Copiloto** | Google AI Studio + Gemini | Usar IA para gerar frontend, arquitetar banco de dados e resolver problemas técnicos em tempo real |
 | 🗄️ **Banco de Dados** | Supabase | Criar e estruturar tabelas na nuvem, executar queries SQL e gerenciar dados relacionais |
-| ☁️ **Deploy** | Vercel | Configurar pipeline de deploy contínuo integrado ao GitHub |
+| ☁️ **Deploy**| Vercel | Configurar pipeline de deploy contínuo integrado ao GitHub |
 | 🔐 **Segurança** | .gitignore + Variáveis de Ambiente | Proteger credenciais sensíveis no repositório e no ambiente de produção |
 
 ---
@@ -102,9 +102,9 @@ Gerenciamento de atividades de acompanhamento com prioridades (Alta/Média/Baixa
 ┌──────────────────┐   ┌────────────────────┐
 │    SUPABASE      │   │      VERCEL        │
 │  banco de dados  │   │  deploy do app     │
-│  autenticação    │   │  hospedagem web    │
-│  tabelas CRM     │   │  pipeline CI/CD    │
-│  queries SQL     │   │  variáveis de env  │
+│  hospedagem web    │   │  pipeline CI/CD    │
+│  tabelas CRM     │   │  variáveis de env  │
+│  queries SQL     │   │                    │
 └──────────────────┘   └────────────────────┘
 ```
 

@@ -17,6 +17,11 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: 'Executive Lens | Portal de Vendas',
   description: 'Gestão de performance e CRM de alto nível.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 import { AuthProvider } from '@/components/AuthProvider';

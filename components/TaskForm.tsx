@@ -60,7 +60,8 @@ export function TaskForm({ task, isOpen, onClose, onSave }: TaskFormProps) {
         const { error } = await supabase
           .from('tasks')
           .update(dataToSave)
-          .eq('id', task.id);
+          .eq('id', task.id)
+          .eq('user_id', user.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -78,7 +79,7 @@ export function TaskForm({ task, isOpen, onClose, onSave }: TaskFormProps) {
   };
 
   const handleDelete = async () => {
-    if (!task?.id || !supabase) return;
+    if (!task?.id || !supabase || !user) return;
     
     if (!confirmDelete) {
       setConfirmDelete(true);
@@ -90,7 +91,8 @@ export function TaskForm({ task, isOpen, onClose, onSave }: TaskFormProps) {
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', task.id);
+        .eq('id', task.id)
+        .eq('user_id', user.id);
       if (error) throw error;
       onSave();
       onClose();
