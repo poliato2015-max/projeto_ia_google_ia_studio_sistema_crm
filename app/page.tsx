@@ -13,6 +13,7 @@ import { Calendar, Plus, Users, TrendingUp, Handshake, Target, Loader2, AlertTri
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSupabase, Contact, Deal, isSupabaseConfigured } from '@/lib/supabase';
+import { calculateDealHealthScore } from '@/lib/dealUtils';
 import { ContactForm } from '@/components/ContactForm';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -71,7 +72,12 @@ export default function DashboardPage() {
       }
 
       setContacts(contRes.data || []);
-      setDeals(dealRes.data || []);
+      const rawDeals = dealRes.data || [];
+      const calculatedDeals = rawDeals.map((deal: any) => ({
+        ...deal,
+        health_score: calculateDealHealthScore(deal)
+      }));
+      setDeals(calculatedDeals);
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error.message || error);
       setFetchError('Ocorreu um erro ao carregar os dados. Verifique suas tabelas no Supabase.');

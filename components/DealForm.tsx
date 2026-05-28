@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Contact, Deal, getSupabase } from '@/lib/supabase';
+import { calculateDealHealthScore } from '@/lib/dealUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -69,8 +70,16 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
     setLoading(true);
 
     try {
+      const { contact, ...cleanFormData } = formData;
+      const selectedContact = contacts.find(c => c.id === cleanFormData.contact_id);
+      const computedHealthScore = calculateDealHealthScore({
+        ...cleanFormData,
+        contact: selectedContact
+      });
+
       const dataToSave = {
-        ...formData,
+        ...cleanFormData,
+        health_score: computedHealthScore,
         user_id: user.id
       };
 

@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSupabase, Deal, isSupabaseConfigured } from '@/lib/supabase';
+import { calculateDealHealthScore } from '@/lib/dealUtils';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter } from 'next/navigation';
 
@@ -57,7 +58,12 @@ export default function DealsPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setDeals(data || []);
+      const rawDeals = data || [];
+      const calculatedDeals = rawDeals.map((deal: any) => ({
+        ...deal,
+        health_score: calculateDealHealthScore(deal)
+      }));
+      setDeals(calculatedDeals);
     } catch (error) {
       console.error('Error fetching deals:', error);
     } finally {
