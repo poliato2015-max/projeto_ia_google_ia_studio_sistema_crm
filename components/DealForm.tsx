@@ -22,13 +22,29 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
       title: '',
       value: 0,
       stage: 'Prospecção',
-      probability: 20,
+      probability: 0,
       health_score: 100,
       contact_id: null,
     }
   );
 
   const supabase = getSupabase();
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(
+        deal || {
+          title: '',
+          value: 0,
+          stage: 'Prospecção',
+          probability: 0,
+          expected_close_date: '',
+          health_score: 100,
+          contact_id: null,
+        }
+      );
+    }
+  }, [deal, isOpen]);
 
   useEffect(() => {
     if (isOpen && user && supabase) {
@@ -152,7 +168,7 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
                     type="number"
                     min="0"
                     max="100"
-                    value={formData.probability || 0}
+                    value={formData.probability ?? 0}
                     onChange={(e) => setFormData({ ...formData, probability: Number(e.target.value) })}
                     className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 focus:ring-2 focus:ring-primary/20"
                   />

@@ -12,7 +12,8 @@ import {
   Loader2,
   Trash2,
   Edit2,
-  RefreshCcw
+  RefreshCcw,
+  Search
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -25,8 +26,19 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const { user } = useAuth();
   const supabase = getSupabase();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const search = params.get('search');
+      if (search) {
+        setSearchTerm(search);
+      }
+    }
+  }, []);
 
   const fetchTasks = useCallback(async () => {
     if (!supabase || !user) return;
@@ -132,6 +144,10 @@ export default function TasksPage() {
     };
   };
 
+  const filteredTasks = tasks.filter(task => 
+    task.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-surface">
       <Navbar />
@@ -153,6 +169,20 @@ export default function TasksPage() {
             </button>
           </div>
 
+          {/* Área de Busca */}
+          {tasks.length > 0 && (
+            <div className="mb-6 max-w-md relative group">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-primary" />
+              <input 
+                type="text" 
+                placeholder="Pesquisar tarefas..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-surface-container-low border-none rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all focus:bg-surface-container-lowest text-on-surface font-medium" 
+              />
+            </div>
+          )}
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="text-primary animate-spin mb-4" size={48} />
@@ -170,9 +200,21 @@ export default function TasksPage() {
                 <Plus size={18} /> Criar agora
               </button>
             </div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="text-center py-20 bg-surface-container-low rounded-3xl border border-outline-variant/10">
+              <ClipboardList className="mx-auto text-on-surface-variant/20 mb-4" size={48} />
+              <h3 className="text-lg font-bold text-on-surface">Nenhuma tarefa correspondente</h3>
+              <p className="text-on-surface-variant mt-2">Nenhuma tarefa encontrada com o termo &quot;{searchTerm}&quot;.</p>
+              <button 
+                onClick={() => setSearchTerm('')}
+                className="mt-6 inline-flex items-center gap-2 bg-primary/10 text-primary px-5 py-2.5 rounded-xl font-bold hover:bg-primary/15 transition-all text-xs uppercase tracking-widest"
+              >
+                Limpar pesquisa
+              </button>
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {tasks.map((task, i) => {
+              {filteredTasks.map((task, i) => {
                 const isOverdue = task.status !== 'concluída' && task.due_date < new Date().toISOString().split('T')[0];
                 const isActive = activeTaskId === task.id;
                 const statusInfo = getStatusLabel(task);

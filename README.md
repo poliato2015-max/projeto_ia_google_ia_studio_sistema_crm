@@ -102,7 +102,7 @@ Gerenciamento de atividades de acompanhamento com prioridades (Alta/Média/Baixa
 ┌──────────────────┐   ┌────────────────────┐
 │    SUPABASE      │   │      VERCEL        │
 │  banco de dados  │   │  deploy do app     │
-│  hospedagem web  │   │  pipeline CI/CD    │
+│  hospedagem web    │   │  pipeline CI/CD    │
 │  tabelas CRM     │   │  variáveis de env  │
 │  queries SQL     │   │                    │
 └──────────────────┘   └────────────────────┘

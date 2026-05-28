@@ -99,6 +99,12 @@ export default function LoginPage() {
     }
   }, []);
 
+  // Limpar mensagens ao alternar entre os formulários
+  useEffect(() => {
+    setError(null);
+    setSuccessMsg(null);
+  }, [isSignUp, isForgotPassword, isResetPassword]);
+
   const passwordRules = useMemo(() => {
     return [
       { id: 'length', label: 'Exatamente 6 caracteres', valid: password.length === 6 },

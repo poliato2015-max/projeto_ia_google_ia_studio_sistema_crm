@@ -20,10 +20,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { getSupabase, Deal, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
+import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default function DealsPage() {
+  const router = useRouter();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -68,6 +70,16 @@ export default function DealsPage() {
       fetchDeals();
     }
   }, [authLoading, fetchDeals]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const search = params.get('search');
+      if (search) {
+        setSearchTerm(search);
+      }
+    }
+  }, []);
 
   const handleDelete = async (id: string) => {
     if (!user || !supabase) return;
@@ -235,9 +247,17 @@ export default function DealsPage() {
                   >
                     <Trash2 size={18} />
                   </button>
-                  <div className="p-3 text-on-surface-variant group-hover:text-primary transition-colors cursor-pointer ml-4">
+                  <button 
+                    onClick={() => {
+                        if (deal.contact?.name) {
+                          router.push(`/contatos?search=${encodeURIComponent(deal.contact.name)}`);
+                        }
+                    }}
+                    title="Ver Contato"
+                    className="p-3 text-on-surface-variant hover:text-primary hover:bg-surface-container-low rounded-xl transition-all ml-4"
+                  >
                     <ArrowRight size={20} />
-                  </div>
+                  </button>
                 </div>
               </motion.div>
             ))}

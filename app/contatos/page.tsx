@@ -69,6 +69,16 @@ export default function ContactsPage() {
     }
   }, [authLoading, fetchContacts]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const search = params.get('search');
+      if (search) {
+        setSearchTerm(search);
+      }
+    }
+  }, []);
+
   const handleDelete = async (id: string) => {
     if (!configured) {
       alert('Supabase não configurado.');
