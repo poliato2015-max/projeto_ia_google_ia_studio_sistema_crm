@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  transpilePackages: ['motion'],
   // Allow access to remote image placeholder.
   images: {
     remotePatterns: [
