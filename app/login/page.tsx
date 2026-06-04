@@ -137,6 +137,30 @@ export default function LoginPage() {
         setError(null);
         setSuccessMsg(null);
         try {
+          // Check if server/middleware already exchanged the code and we have a valid recovery session
+          const { data: { session: existingSession } } = await supabase.auth.getSession();
+          const isRecSession = isRecoverySession(existingSession);
+
+          if (existingSession && (isRecSession || type === 'recovery')) {
+            console.log('Code exchange skipped: valid recovery session already established by middleware');
+            if (isMounted) {
+              const newParams = new URLSearchParams(window.location.search);
+              newParams.delete('code');
+              const newQuery = newParams.toString();
+              const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '');
+              window.history.replaceState({}, document.title, cleanUrl);
+
+              setIsResetPassword(true);
+              try {
+                window.sessionStorage.setItem('is_recovering', 'true');
+                document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+              } catch (e) {}
+              setSuccessMsg('Código de recuperação validado! Defina sua nova senha abaixo.');
+              setLoading(false);
+            }
+            return;
+          }
+
           const { data: exchangeData, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeErr) {
             throw exchangeErr;
@@ -175,6 +199,29 @@ export default function LoginPage() {
           }
         } catch (err: any) {
           console.error('Exchange error:', err);
+          
+          // Check if despite the exchange error we have a valid session and recovery context
+          try {
+            const { data: { session: checkSession } } = await supabase.auth.getSession();
+            if (checkSession && (isRecoverySession(checkSession) || type === 'recovery')) {
+              if (isMounted) {
+                const newParams = new URLSearchParams(window.location.search);
+                newParams.delete('code');
+                const newQuery = newParams.toString();
+                const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '');
+                window.history.replaceState({}, document.title, cleanUrl);
+
+                setIsResetPassword(true);
+                try {
+                  window.sessionStorage.setItem('is_recovering', 'true');
+                  document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+                } catch (e) {}
+                setSuccessMsg('Código de recuperação validado! Defina sua nova senha abaixo.');
+              }
+              return;
+            }
+          } catch (e) {}
+
           if (isMounted) {
             setError('O link de validação expirou ou já foi utilizado. Por favor, solicite um novo acesso.');
           }
