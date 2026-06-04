@@ -75,6 +75,14 @@ export async function middleware(request: NextRequest) {
   }
 
   if (session && pathname === '/login') {
+    // Se a recuperação de senha estiver ativa ou houver o cookie/parâmetro de recuperação, permita que o usuário permaneça em /login
+    const isRecoveryActive = request.cookies.get('executive-lens-recovery-active')?.value === 'true';
+    const isRecoveryQuery = request.nextUrl.searchParams.get('type') === 'recovery' || request.nextUrl.searchParams.has('code');
+    
+    if (isRecoveryActive || isRecoveryQuery) {
+      return response;
+    }
+
     const redirectResponse = NextResponse.redirect(new URL('/', request.url))
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, {

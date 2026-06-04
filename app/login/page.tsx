@@ -22,6 +22,41 @@ import Image from 'next/image';
 
 const exchangedCodes = new Set<string>();
 
+function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
+function isRecoverySession(session: any): boolean {
+  if (!session || !session.access_token) return false;
+  try {
+    const payload = parseJwt(session.access_token);
+    if (payload && payload.amr && Array.isArray(payload.amr)) {
+      return payload.amr.some((item: any) => {
+        if (typeof item === 'string') {
+          return item === 'recovery';
+        }
+        if (item && typeof item === 'object') {
+          return item.method === 'recovery';
+        }
+        return false;
+      });
+    }
+  } catch (e) {}
+  return false;
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,12 +95,14 @@ export default function LoginPage() {
     let isMounted = true;
     if (!supabase) return;
 
-    const { data } = supabase.auth.onAuthStateChange(async (event: any) => {
+    const { data } = supabase.auth.onAuthStateChange(async (event: any, currentSession: any) => {
       if (!isMounted) return;
-      if (event === 'PASSWORD_RECOVERY') {
+      const isRec = event === 'PASSWORD_RECOVERY' || isRecoverySession(currentSession);
+      if (isRec) {
         setIsResetPassword(true);
         try {
           window.sessionStorage.setItem('is_recovering', 'true');
+          document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
         } catch (e) {}
       }
     });
@@ -100,7 +137,7 @@ export default function LoginPage() {
         setError(null);
         setSuccessMsg(null);
         try {
-          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          const { data: exchangeData, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeErr) {
             throw exchangeErr;
           }
@@ -114,15 +151,19 @@ export default function LoginPage() {
           const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '');
           window.history.replaceState({}, document.title, cleanUrl);
 
+          const currentSession = exchangeData?.session || (await supabase.auth.getSession()).data.session;
+          const jwtRecovery = isRecoverySession(currentSession);
+
           let isRecoveringSession = false;
           try {
             isRecoveringSession = window.sessionStorage.getItem('is_recovering') === 'true';
           } catch (e) {}
 
-          if (type === 'recovery' || isRecoveringSession) {
+          if (type === 'recovery' || isRecoveringSession || jwtRecovery) {
             setIsResetPassword(true);
             try {
               window.sessionStorage.setItem('is_recovering', 'true');
+              document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
             } catch (e) {}
             setSuccessMsg('Código de recuperação validado! Defina sua nova senha abaixo.');
           } else {
@@ -193,14 +234,28 @@ export default function LoginPage() {
         isRecoveringSession = window.sessionStorage.getItem('is_recovering') === 'true';
       } catch (e) {}
 
+      const checkActiveSession = async () => {
+        if (!supabase) return;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (isRecoverySession(session)) {
+            setIsResetPassword(true);
+            window.sessionStorage.setItem('is_recovering', 'true');
+            document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+          }
+        } catch (e) {}
+      };
+      checkActiveSession();
+
       if (params.get('type') === 'recovery' || window.location.hash.includes('type=recovery') || isRecoveringSession) {
         setIsResetPassword(true);
         try {
           window.sessionStorage.setItem('is_recovering', 'true');
+          document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
         } catch (e) {}
       }
     }
-  }, []);
+  }, [supabase]);
 
   // Limpar mensagens ao alternar entre os formulários
   useEffect(() => {
@@ -276,6 +331,12 @@ export default function LoginPage() {
     try {
       if (!supabase) throw new Error('Serviço indisponível.');
       
+      // Set local recovery markers immediately so the same browser session can identify recovery mode even if some params are stripped
+      try {
+        window.sessionStorage.setItem('is_recovering', 'true');
+        document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+      } catch (e) {}
+
       const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/login?type=recovery`,
       });
@@ -315,6 +376,7 @@ export default function LoginPage() {
       setSuccessMsg('Sua senha foi atualizada com sucesso! Por favor, realize o login com a sua nova senha.');
       try {
         window.sessionStorage.removeItem('is_recovering');
+        document.cookie = 'executive-lens-recovery-active=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure;';
       } catch (e) {}
 
       // Limpar sessão local de recuperação imediatamente no Supabase e no estado local

@@ -5,6 +5,41 @@ import { User, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
+function parseJwt(token: string) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
+function isRecoverySession(session: any): boolean {
+  if (!session || !session.access_token) return false;
+  try {
+    const payload = parseJwt(session.access_token);
+    if (payload && payload.amr && Array.isArray(payload.amr)) {
+      return payload.amr.some((item: any) => {
+        if (typeof item === 'string') {
+          return item === 'recovery';
+        }
+        if (item && typeof item === 'object') {
+          return item.method === 'recovery';
+        }
+        return false;
+      });
+    }
+  } catch (e) {}
+  return false;
+}
+
 // Support standard client initialization without invasive mock objects
 
 interface AuthContextType {
@@ -100,24 +135,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           hasSessionStorageRecovery = window.sessionStorage.getItem('is_recovering') === 'true';
         } catch (e) {}
 
+        const jwtRecovery = session ? isRecoverySession(session) : false;
+
         isRecovery = searchParams.get('type') === 'recovery' || 
                      hashParams.get('type') === 'recovery' ||
+                     searchParams.has('code') ||
                      searchParams.has('error') || 
                      hashParams.has('error') ||
                      searchParams.has('error_code') ||
                      hashParams.has('error_code') ||
-                     hasSessionStorageRecovery;
+                     hasSessionStorageRecovery ||
+                     jwtRecovery;
       }
 
       if (isRecovery) {
         console.log('AuthProvider: Active password recovery or error state detected in URL, preventing auto-redirect to dashboard.');
+        try {
+          document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+        } catch (e) {}
         return;
       }
 
       console.log('AuthProvider: Logged in user on login page, forcing redirect to dashboard...');
       window.location.href = '/';
     }
-  }, [user, loading, pathname]);
+  }, [user, loading, pathname, session]);
 
   useEffect(() => {
     let isMounted = true;
@@ -139,17 +181,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }, 5000);
 
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         clearTimeout(stateTimeout);
         
         if (error) {
           console.error('AuthProvider: Error getting session:', error);
         }
-        console.log('AuthProvider: Session found:', !!session);
+        console.log('AuthProvider: Session found:', !!currentSession);
         if (isMounted) {
-          setSession(session);
-          setUser(session?.user ?? null);
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
           setLoading(false);
+          
+          if (isRecoverySession(currentSession)) {
+            try {
+              window.sessionStorage.setItem('is_recovering', 'true');
+              document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
+            } catch (e) {}
+          }
         }
       } catch (e) {
         clearTimeout(stateTimeout);
@@ -166,9 +215,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.log('AuthProvider: authStateChange event:', event, 'Session:', !!currentSession);
         if (!isMounted) return;
         
-        if (event === 'PASSWORD_RECOVERY') {
+        const isRec = event === 'PASSWORD_RECOVERY' || isRecoverySession(currentSession);
+        if (isRec) {
           try {
             window.sessionStorage.setItem('is_recovering', 'true');
+            document.cookie = 'executive-lens-recovery-active=true; path=/; max-age=1800; SameSite=None; Secure;';
           } catch (e) {}
         }
 
