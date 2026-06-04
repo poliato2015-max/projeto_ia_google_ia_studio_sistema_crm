@@ -22,7 +22,7 @@ O Gemini foi utilizado como **copiloto de desenvolvimento** em todas as etapas: 
 
 ## 🌐 Acesse o projeto
 
-**App publicado:** [https://gamer-zone-buddy.lovable.app](https://projeto-ia-google-ia-studio-sistema.vercel.app/login)
+**App publicado:** [https://projeto-ia-google-ia-studio-sistema.vercel.app/login](https://projeto-ia-google-ia-studio-sistema.vercel.app/login)
 
 ---
 
