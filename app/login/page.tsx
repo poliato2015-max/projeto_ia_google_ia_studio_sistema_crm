@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 
+const exchangedCodes = new Set<string>();
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,6 +55,101 @@ export default function LoginPage() {
     return () => { isMounted = false; };
   }, [supabase]);
 
+  // Listen to Supabase authorization events, specifically PASSWORD_RECOVERY
+  useEffect(() => {
+    let isMounted = true;
+    if (!supabase) return;
+
+    const { data } = supabase.auth.onAuthStateChange(async (event: any) => {
+      if (!isMounted) return;
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsResetPassword(true);
+        try {
+          window.sessionStorage.setItem('is_recovering', 'true');
+        } catch (e) {}
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (data && data.subscription) {
+        data.subscription.unsubscribe();
+      }
+    };
+  }, [supabase]);
+
+  // Handle PKCE code exchange in URL (for signup confirmation or password recovery)
+  useEffect(() => {
+    let isMounted = true;
+    if (!supabase) return;
+
+    const handleCodeExchange = async () => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const type = params.get('type');
+
+      if (code) {
+        if (exchangedCodes.has(code)) {
+          console.log('Code already processed or in progress:', code);
+          return;
+        }
+        exchangedCodes.add(code);
+
+        setLoading(true);
+        setError(null);
+        setSuccessMsg(null);
+        try {
+          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeErr) {
+            throw exchangeErr;
+          }
+          
+          if (!isMounted) return;
+
+          // Clear code from URL so refreshing won't re-exchange an already used code
+          const newParams = new URLSearchParams(window.location.search);
+          newParams.delete('code');
+          const newQuery = newParams.toString();
+          const cleanUrl = window.location.pathname + (newQuery ? `?${newQuery}` : '');
+          window.history.replaceState({}, document.title, cleanUrl);
+
+          let isRecoveringSession = false;
+          try {
+            isRecoveringSession = window.sessionStorage.getItem('is_recovering') === 'true';
+          } catch (e) {}
+
+          if (type === 'recovery' || isRecoveringSession) {
+            setIsResetPassword(true);
+            try {
+              window.sessionStorage.setItem('is_recovering', 'true');
+            } catch (e) {}
+            setSuccessMsg('Código de recuperação validado! Defina sua nova senha abaixo.');
+          } else {
+            // It's a signup confirmation / active user email click!
+            setSuccessMsg('E-mail verificado e autenticado com sucesso! Entrando...');
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1500);
+          }
+        } catch (err: any) {
+          console.error('Exchange error:', err);
+          if (isMounted) {
+            setError('O link de validação expirou ou já foi utilizado. Por favor, solicite um novo acesso.');
+          }
+        } finally {
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
+      }
+    };
+
+    handleCodeExchange();
+
+    return () => { isMounted = false; };
+  }, [supabase]);
+
   // Check for recovery type in URL to trigger reset mode and handle potential link errors
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -72,14 +169,20 @@ export default function LoginPage() {
           window.sessionStorage.removeItem('is_recovering');
         } catch (e) {}
         
+        let customError = 'O link de validação expirou ou já foi utilizado. Por favor, solicite um novo acesso.';
         if (errorCode === 'otp_expired' || (errorDesc && errorDesc.toLowerCase().includes('expired')) || urlError === 'access_denied') {
-          setError('O link de recuperação de senha expirou ou já foi utilizado. Por favor, solicite uma nova recuperação.');
+          customError = 'O link de validação (cadastro ou recuperação de senha) expirou ou já foi utilizado. Por favor, tente realizar o login ou solicite um novo código.';
         } else if (errorDesc) {
-          setError(decodeURIComponent(errorDesc).replace(/\+/g, ' '));
-        } else {
-          setError('Houve um erro ao processar o link de acesso.');
+          customError = decodeURIComponent(errorDesc).replace(/\+/g, ' ');
         }
-        setIsForgotPassword(true);
+        setError(customError);
+
+        // Safely determine if this was a password recovery attempt
+        const isRecType = params.get('type') === 'recovery' || window.location.hash.includes('type=recovery');
+        if (isRecType) {
+          setIsForgotPassword(true);
+        }
+
         // Clear history so refreshing/interacting doesn't keep showing the error URL state
         window.history.replaceState({}, document.title, window.location.pathname);
         return;

@@ -86,6 +86,16 @@ export default function DashboardPage() {
     }
   }, [supabase, configured, user]);
 
+  // Redirect to login if the URL contains authentication error parameters
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.has('error') || searchParams.has('error_code')) {
+        window.location.href = `/login${window.location.search}`;
+      }
+    }
+  }, []);
+
   useEffect(() => {
     // Only fetch when auth state is stable
     if (!authLoading) {

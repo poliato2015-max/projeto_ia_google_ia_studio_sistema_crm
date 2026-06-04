@@ -5,6 +5,8 @@ import { User, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
+// Support standard client initialization without invasive mock objects
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -26,6 +28,60 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = getSupabase();
+
+  // Suppress MetaMask and external extension errors that can pollute the developer console
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Patch console.error to ignore MetaMask and extension warnings
+    const originalConsoleError = console.error;
+    console.error = (...args: any[]) => {
+      const errorString = args.map(arg => String(arg?.message || arg || '')).join(' ');
+      if (
+        errorString.toLowerCase().includes('metamask') ||
+        errorString.toLowerCase().includes('ethereum') ||
+        errorString.toLowerCase().includes('wallet')
+      ) {
+        // Suppress MetaMask/Web3/Wallet warnings inside sandboxed frame
+        return;
+      }
+      originalConsoleError(...args);
+    };
+
+    // Listen to global unhandled errors to avoid app crash logging from extensions
+    const handleGlobalError = (event: ErrorEvent) => {
+      const msg = event?.message || '';
+      if (
+        msg.toLowerCase().includes('metamask') || 
+        msg.toLowerCase().includes('ethereum') ||
+        msg.toLowerCase().includes('wallet')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event?.reason?.message || String(event?.reason || '');
+      if (
+        reason.toLowerCase().includes('metamask') || 
+        reason.toLowerCase().includes('ethereum') ||
+        reason.toLowerCase().includes('wallet')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    window.addEventListener('error', handleGlobalError, true);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection, true);
+
+    return () => {
+      console.error = originalConsoleError;
+      window.removeEventListener('error', handleGlobalError, true);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (!loading && user && pathname === '/login') {

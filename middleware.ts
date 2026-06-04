@@ -56,11 +56,37 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
 
   if (!session && !isPublic) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    request.nextUrl.searchParams.forEach((value, key) => {
+      loginUrl.searchParams.set(key, value)
+    })
+    const redirectResponse = NextResponse.redirect(loginUrl)
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path || '/',
+        domain: cookie.domain,
+        maxAge: cookie.maxAge,
+        expires: cookie.expires,
+        sameSite: 'none',
+        secure: true,
+      })
+    })
+    return redirectResponse
   }
 
   if (session && pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url))
+    const redirectResponse = NextResponse.redirect(new URL('/', request.url))
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path || '/',
+        domain: cookie.domain,
+        maxAge: cookie.maxAge,
+        expires: cookie.expires,
+        sameSite: 'none',
+        secure: true,
+      })
+    })
+    return redirectResponse
   }
 
   return response
