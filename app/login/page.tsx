@@ -5,6 +5,7 @@ import { getSupabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { validateBrazilianCellPhone, maskBrazilianPhone } from '@/lib/phone-validation';
 import { 
   Loader2, 
   Mail, 
@@ -319,25 +320,16 @@ export default function LoginPage() {
     ];
   }, [password]);
 
-  const maskPhone = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 11);
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-  };
-
   const isPasswordValid = passwordRules.every(rule => rule.valid);
   const passwordsMatch = password === confirmPassword;
-  
+
   const isFullNameValid = useMemo(() => {
     const parts = fullName.trim().split(/\s+/);
     return parts.length >= 2 && parts.every(p => p.length >= 2) && fullName.length <= 30;
   }, [fullName]);
 
-  const isPhoneValid = useMemo(() => {
-    const digits = phone.replace(/\D/g, '');
-    return digits.length === 11 && digits[2] === '9';
-  }, [phone]);
+  const phoneValidation = useMemo(() => validateBrazilianCellPhone(phone), [phone]);
+  const isPhoneValid = phoneValidation.valid;
 
   const isEmailValid = useMemo(() => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 50;
@@ -658,14 +650,14 @@ export default function LoginPage() {
                         placeholder="Telefone (DDD + 9 dígitos)"
                         required
                         value={phone}
-                        onChange={(e) => setPhone(maskPhone(e.target.value))}
+                        onChange={(e) => setPhone(maskBrazilianPhone(e.target.value))}
                         className={cn(
                           "w-full bg-surface-container-low border-2 rounded-2xl py-4 pl-12 pr-4 outline-none transition-all font-medium text-on-surface",
                           phone && !isPhoneValid ? "border-error/50" : "border-outline-variant/30 focus:border-primary"
                         )}
                       />
-                      {phone && !isPhoneValid && (
-                        <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">Formato: (XX) 9XXXX-XXXX</p>
+                      {phone && !isPhoneValid && phoneValidation.error && (
+                        <p className="text-[10px] text-error font-bold mt-1 ml-4 tracking-tight">{phoneValidation.error}</p>
                       )}
                     </div>
                   </motion.div>
