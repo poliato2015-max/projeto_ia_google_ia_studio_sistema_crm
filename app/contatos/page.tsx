@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';
 import { ContactForm } from '@/components/ContactForm';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { 
   Users, 
   Plus, 
@@ -16,7 +17,8 @@ import {
   Wallet,
   Trash2,
   Edit2,
-  Loader2
+  Loader2,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -32,6 +34,8 @@ export default function ContactsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   
   const { user, loading: authLoading } = useAuth();
   const configured = isSupabaseConfigured();
@@ -79,19 +83,51 @@ export default function ContactsPage() {
     }
   }, []);
 
-  const handleDelete = async (id: string) => {
+  const contactToDelete = contacts.find(c => c.id === deleteConfirmId);
+
+  const handleDeleteClick = async (id: string) => {
+    setDeleteError(null);
+    const contact = contacts.find(c => c.id === id);
+    if (!contact || !supabase || !user) return;
+
+    // Check if active contact is linked to deals
+    if (contact.status !== 'Inativo') {
+      try {
+        const { data: linkedDeals } = await supabase
+          .from('deals')
+          .select('id')
+          .eq('contact_id', id)
+          .eq('user_id', user.id);
+
+        if (linkedDeals && linkedDeals.length > 0) {
+          setDeleteError(`O contato "${contact.name}" está vinculado a ${linkedDeals.length} negócio(s) ativo(s). Remova ou finalize os vínculos antes de excluir.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking linked deals:', err);
+      }
+    }
+
+    setDeleteConfirmId(id);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return;
     if (!configured) {
       alert('Supabase não configurado.');
+      setDeleteConfirmId(null);
       return;
     }
-    if (!user || !supabase) return;
-    if (!confirm('Tem certeza que deseja excluir este contato?')) return;
+    if (!user || !supabase) {
+      setDeleteConfirmId(null);
+      return;
+    }
     
     try {
       const { error } = await supabase
         .from('contacts')
         .delete()
-        .eq('id', id)
+        .eq('id', deleteConfirmId)
         .eq('user_id', user.id);
       
       if (error) throw error;
@@ -99,6 +135,8 @@ export default function ContactsPage() {
     } catch (error) {
       console.error('Error deleting contact:', error);
       alert('Erro ao excluir contato.');
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -185,6 +223,22 @@ export default function ContactsPage() {
             </div>
           </div>
 
+          {deleteError && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-4 bg-error-container/20 border-2 border-error/20 rounded-2xl text-error text-[11px] font-bold flex items-center justify-between gap-2 mb-6"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-error" />
+                {deleteError}
+              </div>
+              <button onClick={() => setDeleteError(null)} className="p-1 hover:bg-error-container/10 rounded-lg transition-colors shrink-0">
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+
           {/* Table Area */}
           <div className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-sm border border-outline-variant/10">
             <div className="overflow-x-auto">
@@ -264,7 +318,7 @@ export default function ContactsPage() {
                           ${contact.value?.toLocaleString() || '0'}
                         </td>
                         <td className="px-8 py-5 text-right">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex justify-end gap-2">
                             <button 
                               onClick={() => {
                                 setSelectedContact(contact);
@@ -275,7 +329,7 @@ export default function ContactsPage() {
                               <Edit2 size={16} />
                             </button>
                             <button 
-                              onClick={() => handleDelete(contact.id)}
+                              onClick={() => handleDeleteClick(contact.id)}
                               className="p-2 text-on-surface-variant hover:text-error hover:bg-error-container/10 rounded-lg transition-all"
                             >
                               <Trash2 size={16} />
@@ -300,6 +354,17 @@ export default function ContactsPage() {
           setSelectedContact(null);
         }}
         onSave={fetchContacts}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteConfirmId}
+        title="Excluir contato"
+        message={`Tem certeza que deseja excluir "${contactToDelete?.name || 'este contato'}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirmId(null)}
       />
     </div>
   );

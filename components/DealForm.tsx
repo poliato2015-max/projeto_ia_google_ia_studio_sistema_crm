@@ -5,6 +5,7 @@ import { X, Loader2 } from 'lucide-react';
 import { Contact, Deal, getSupabase } from '@/lib/supabase';
 import { calculateDealHealthScore } from '@/lib/dealUtils';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/components/AuthProvider';
 
 interface DealFormProps {
@@ -16,6 +17,7 @@ interface DealFormProps {
 
 export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const { user } = useAuth();
   const [formData, setFormData] = useState<Partial<Deal>>(
@@ -33,6 +35,7 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
 
   useEffect(() => {
     if (isOpen) {
+      setError(null);
       setFormData(
         deal || {
           title: '',
@@ -63,10 +66,47 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
     if (!user || !supabase) {
       alert('Sessão expirada. Por favor, faça login novamente.');
       return;
     }
+
+    // Duplicate check for new deals
+    if (!deal?.id && formData.title && formData.contact_id) {
+      try {
+        const { data: existing } = await supabase
+          .from('deals')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('title', formData.title)
+          .eq('contact_id', formData.contact_id)
+          .eq('value', formData.value ?? 0)
+          .eq('probability', formData.probability ?? 0)
+          .eq('stage', formData.stage ?? '')
+          .eq('expected_close_date', formData.expected_close_date ?? '');
+
+        if (existing && existing.length > 0) {
+          setError('Já existe um negócio cadastrado com estes mesmos dados.');
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking duplicate deal:', err);
+      }
+    }
+
+    // Date validation
+    if (formData.expected_close_date) {
+      const today = new Date().toISOString().split('T')[0];
+      if (formData.expected_close_date < today) {
+        setError('A previsão de fechamento não pode ser anterior à data atual.');
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -133,6 +173,18 @@ export function DealForm({ deal, isOpen, onClose, onSave }: DealFormProps) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="p-4 bg-error-container/20 border-2 border-error/20 rounded-2xl text-error text-[11px] font-bold flex flex-col gap-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-error" />
+                    {error}
+                  </div>
+                </motion.div>
+              )}
               <div>
                 <label className="text-[10px] font-black uppercase text-on-surface-variant mb-2 block tracking-widest">Título do Negócio</label>
                 <input

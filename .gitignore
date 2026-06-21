@@ -5,3 +5,6 @@ coverage/
 *.log
 .env*
 !.env.example
+iniciar-tunel.bat
+tunel.ps1
+tunel.log

@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { getSupabase, Deal, isSupabaseConfigured } from '@/lib/supabase';
 import { calculateDealHealthScore } from '@/lib/dealUtils';
 import { useAuth } from '@/components/AuthProvider';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,7 @@ export default function DealsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { user, loading: authLoading } = useAuth();
   const configured = isSupabaseConfigured();
@@ -87,19 +89,29 @@ export default function DealsPage() {
     }
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (!user || !supabase) return;
-    if (!confirm('Excluir este negócio permanentemente?')) return;
+  const dealToDelete = deals.find(d => d.id === deleteConfirmId);
+
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId || !user || !supabase) {
+      setDeleteConfirmId(null);
+      return;
+    }
     try {
       const { error } = await supabase
         .from('deals')
         .delete()
-        .eq('id', id)
+        .eq('id', deleteConfirmId)
         .eq('user_id', user.id);
       if (error) throw error;
       fetchDeals();
     } catch (error) {
       console.error('Error deleting deal:', error);
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -248,7 +260,7 @@ export default function DealsPage() {
                     <Edit2 size={18} />
                   </button>
                   <button 
-                    onClick={() => handleDelete(deal.id)}
+                    onClick={() => handleDeleteClick(deal.id)}
                     className="p-3 text-on-surface-variant hover:text-error hover:bg-error-container/10 rounded-xl transition-all"
                   >
                     <Trash2 size={18} />
@@ -279,6 +291,17 @@ export default function DealsPage() {
           setSelectedDeal(null);
         }}
         onSave={fetchDeals}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteConfirmId}
+        title="Excluir negócio"
+        message={`Tem certeza que deseja excluir "${dealToDelete?.title || 'este negócio'}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirmId(null)}
       />
     </div>
   );
