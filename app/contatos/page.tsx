@@ -34,6 +34,7 @@ export default function ContactsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
@@ -79,6 +80,10 @@ export default function ContactsPage() {
       const search = params.get('search');
       if (search) {
         setSearchTerm(search);
+      }
+      const id = params.get('id');
+      if (id) {
+        setSelectedContactId(id);
       }
     }
   }, []);
@@ -141,9 +146,11 @@ export default function ContactsPage() {
   };
 
   const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.company?.toLowerCase().includes(searchTerm.toLowerCase())
+    selectedContactId
+      ? c.id === selectedContactId
+      : c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.company?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const stats = {

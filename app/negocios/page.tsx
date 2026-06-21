@@ -267,8 +267,8 @@ export default function DealsPage() {
                   </button>
                   <button 
                     onClick={() => {
-                        if (deal.contact?.name) {
-                          router.push(`/contatos?search=${encodeURIComponent(deal.contact.name)}`);
+                        if (deal.contact_id) {
+                          router.push(`/contatos?id=${deal.contact_id}`);
                         }
                     }}
                     title="Ver Contato"
